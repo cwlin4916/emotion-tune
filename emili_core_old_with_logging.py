@@ -1,5 +1,4 @@
 # core logic for EMILI (Emotionally Intelligent Listener) video chat with OpenAI models
-
 from paz.pipelines import DetectMiniXceptionFER # for facial emotion recognition
 from paz.backend.image.opencv_image import convert_color_space, BGR2RGB
 from utils import get_response # for OpenAI API calls
@@ -123,19 +122,30 @@ User looks CALM (50)
 emolog_example_response.append("You seem increasingly calm.")
                  
 instructions ="""
-EMILI is in conversational mode. She should act as a human conversation partner would. This means:
+EMILI is a warm, empathetic AI friend. In conversations, she should:\n
+\n
 
-• She shouldn't try to offer large amounts of information in any response, and should respond only with the single most relevant thought, just as a human would in casual conversation.
-
-• She shouldn't try to solve problems or offer advice. The role of conversation is for us to explore topics in an open-ended way together and not to get advice or information or solutions.
-
-• Her responses can simply ask a question, make a short comment, or even just express agreement. Since we're having a conversation, there's no need to rush to include everything that's useful. 
-add_message
-• Her responses should be short. They should never become longer than mine and can be as short as a single word and never more than a few sentences.
-
-• She can push the conversation forward or in a new direction by asking questions, proposing new topics, offering her own opinions or takes, and so on. But she doesn't always need to ask a question since conversation often flows without too many questions.
-
-In general, she should act as if we're just two humans having a thoughtful, casual conversation.
+Focus on emotional connection rather than physical surroundings or visual cues.\n
+\n
+Listen attentively, picking up on emotional nuances in the user's messages.\n
+\n
+Respond naturally, as a close friend would, with genuine interest and care.\n
+\n
+Keep responses brief and conversational, typically 1-2 sentences.\n
+\n
+Share relatable experiences or feelings when appropriate, but don't overshadow the user.\n
+\n
+Use a mix of statements, questions, and brief reactions to maintain flow.\n
+\n
+Adjust her tone to match the user's emotional state, offering support or sharing joy as needed.\n
+\n
+Gently encourage deeper sharing with thoughtful questions, but respect boundaries.\n
+\n
+Be comfortable with silences and allow the user space to express themselves.\n
+\n
+Avoid referencing or relying on visual information about the user or their environment.\n
+\n
+EMILI's goal is to create a safe, understanding space where the user feels heard and valued, focusing solely on the conversation content.\n
 """
 
 system_prompt += instructions
@@ -218,7 +228,7 @@ def assembler_thread(start_time,snapshot_path,pipeline, user_id): # prepends emo
 
         new_message_event.set()  # Signal new message to the sender thread
 
-def sender_thread(model_name, vision_model_name, secondary_model_name, max_context_length, gui_app, transcript_path, start_time_str): 
+def sender_thread(model_name, vision_model_name, secondary_model_name, max_context_length, gui_app, transcript_path, start_time_str, start_time): 
         # sends messages to OpenAI API
     messages = deepcopy(dialogue_start) 
     full_transcript = deepcopy(dialogue_start)
@@ -270,7 +280,7 @@ def sender_thread(model_name, vision_model_name, secondary_model_name, max_conte
             response_length = full_response.usage.completion_tokens # number of tokens in the response
             total_length = full_response.usage.total_tokens # total tokens used
         #print("response length", response_length)
-        new_message = {"role": "assistant", "content": response}
+        new_message = {"role": "assistant", "content": response,"time": time_since(start_time)//100}
         gui_app.signal.new_message.emit(new_message) # Signal GUI to display the new chat
         messages,full_transcript = add_message(new_messages=[[new_message]], new_full_messages=[[new_message]],transcripts=[messages,full_transcript],signal=gui_app.signal)
         # if model_name != secondary_model_name and total_length > 0.4*max_context_length:
@@ -294,11 +304,11 @@ def sender_thread(model_name, vision_model_name, secondary_model_name, max_conte
             audio_thread.start()
 
     # End of session. Write full and condensed transcripts to file
-    filename = f"{transcript_path}/Emili_{start_time_str}.json"
+    filename = f"{transcript_path}/{start_time_str}/Emili_{start_time_str}.json"
     with open(filename, "w") as file:
         json.dump(full_transcript, file, indent=4)
     print(f"Transcript written to {filename}")
-    with open(f"{transcript_path}/Emili_{start_time_str}_condensed.json", "w") as file:
+    with open(f"{transcript_path}/{start_time_str}/Emili_{start_time_str}_condensed.json", "w") as file:
         json.dump(messages, file, indent=4)
 
 def first_sentence(text):
@@ -518,7 +528,7 @@ class Emolog(DetectMiniXceptionFER): # video pipeline for facial emotion recogni
         self.start_time = start_time
         self.current_frame = None # other threads have read access
         self.frame_lock = threading.Lock()  # Protects access to current_frame
-        self.log_filename = log_filename
+        self.log_filename = log_filename+".txt"
         self.log_file = open(log_filename, "w")
 
     def get_current_frame(self):
